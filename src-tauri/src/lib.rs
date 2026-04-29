@@ -46,6 +46,70 @@ fn voice_shortcut_mutex() -> &'static std::sync::Mutex<Option<Shortcut>> {
     CURRENT_VOICE_SHORTCUT.get_or_init(|| std::sync::Mutex::new(None))
 }
 
+#[cfg(target_os = "macos")]
+fn hide_dock_icon(app: tauri::AppHandle) {
+    let _ = app.set_dock_visibility(false);
+
+    std::thread::spawn(move || {
+        for delay_ms in [100_u64, 500, 1_500] {
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            let _ = app.set_dock_visibility(false);
+            prune_copyosity_from_dock_recents();
+        }
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn prune_copyosity_from_dock_recents() {
+    let Ok(home) = std::env::var("HOME") else {
+        return;
+    };
+    let dock_plist = format!("{home}/Library/Preferences/com.apple.dock.plist");
+
+    let Ok(output) = std::process::Command::new("plutil")
+        .args(["-convert", "json", "-o", "-", &dock_plist])
+        .output()
+    else {
+        return;
+    };
+    if !output.status.success() {
+        return;
+    }
+
+    let Ok(mut dock) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
+        return;
+    };
+    let Some(recent_apps) = dock.get_mut("recent-apps").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+
+    let before = recent_apps.len();
+    recent_apps.retain(|entry| {
+        entry
+            .pointer("/tile-data/bundle-identifier")
+            .and_then(|v| v.as_str())
+            != Some("com.vkovalskii.copyosity")
+    });
+    if recent_apps.len() == before {
+        return;
+    }
+
+    let tmp_json = std::env::temp_dir().join("copyosity-dock.plist.json");
+    let Ok(json) = serde_json::to_vec(&dock) else {
+        return;
+    };
+    if std::fs::write(&tmp_json, json).is_err() {
+        return;
+    }
+
+    let tmp_arg = tmp_json.to_string_lossy().to_string();
+    let _ = std::process::Command::new("plutil")
+        .args(["-convert", "binary1", "-o", &dock_plist, &tmp_arg])
+        .status();
+    let _ = std::fs::remove_file(tmp_json);
+    let _ = std::process::Command::new("killall").arg("Dock").status();
+}
+
 /// Parse a string like "option+space", "cmd+space", "ctrl+alt+space" into a Shortcut.
 fn parse_shortcut(s: &str) -> Option<Shortcut> {
     let lower = s.to_lowercase();
@@ -153,6 +217,8 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                app.set_dock_visibility(false);
+                hide_dock_icon(app.handle().clone());
                 app.handle().plugin(tauri_plugin_autostart::init(
                     MacosLauncher::LaunchAgent,
                     None::<Vec<&str>>,
@@ -294,6 +360,11 @@ pub fn run() {
         .run(|app, event| match event {
             tauri::RunEvent::ExitRequested { api, .. } => {
                 api.prevent_exit();
+            }
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Ready | tauri::RunEvent::Resumed => {
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                hide_dock_icon(app.clone());
             }
             tauri::RunEvent::WindowEvent { label, event, .. } => {
                 match (label.as_str(), &event) {

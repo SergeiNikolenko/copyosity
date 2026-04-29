@@ -4,5 +4,7 @@
 <dict>
   <key>LSUIElement</key>
   <true/>
+  <key>LSRequiresCarbon</key>
+  <false/>
 </dict>
 </plist>
