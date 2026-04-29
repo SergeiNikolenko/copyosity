@@ -133,6 +133,7 @@ pub fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
     .title("Copyosity Settings")
     .inner_size(580.0, 680.0)
     .resizable(true)
+    .skip_taskbar(true)
     .center();
 
     #[cfg(target_os = "macos")]

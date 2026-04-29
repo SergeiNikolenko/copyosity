@@ -18,6 +18,9 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 use tauri_nspanel::{ManagerExt, WebviewWindowExt};
 
 #[cfg(target_os = "macos")]
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
+
+#[cfg(target_os = "macos")]
 tauri_nspanel::tauri_panel!(
     panel!(CopyosityPanel {
         config: {
@@ -147,6 +150,19 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                app.handle().plugin(tauri_plugin_autostart::init(
+                    MacosLauncher::LaunchAgent,
+                    None::<Vec<&str>>,
+                ))?;
+
+                if let Err(e) = app.autolaunch().enable() {
+                    eprintln!("copyosity: failed to enable autostart: {}", e);
+                }
+            }
+
             let app_dir = app.path().app_data_dir().expect("Failed to get app data dir");
             let db = Arc::new(Database::new(app_dir).expect("Failed to initialize database"));
             app.manage(db.clone());
