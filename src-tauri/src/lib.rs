@@ -216,7 +216,7 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
-                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                app.set_activation_policy(tauri::ActivationPolicy::Prohibited);
                 app.set_dock_visibility(false);
                 hide_dock_icon(app.handle().clone());
                 app.handle().plugin(tauri_plugin_autostart::init(
@@ -363,7 +363,7 @@ pub fn run() {
             }
             #[cfg(target_os = "macos")]
             tauri::RunEvent::Ready | tauri::RunEvent::Resumed => {
-                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Prohibited);
                 hide_dock_icon(app.clone());
             }
             tauri::RunEvent::WindowEvent { label, event, .. } => {
